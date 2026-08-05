@@ -61,7 +61,10 @@ app.post('/contacto', async (req, res) => {
     }
 });
 
-// Middleware para manejar 404
+app.get('/ping', (req, res) => {
+  res.send('Pong');
+});
+
 app.use((req, res, next) => {
     res.status(404).render('404');
 });
