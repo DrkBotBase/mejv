@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="es" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Error 404 | MEJV</title>
+  
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <script>
+    tailwind.config = {
+        darkMode: 'class',
+        theme: {
+            extend: {
+                colors: {
+                    'mejv-blue': '#0041f2',
+                    'mejv-dark': '#0a1e33',
+                    'mejv-lime': '#bfeb30',
+                    'mejv-white': '#ffffff',
+                    'mejv-black': '#050c18',
+                },
+                fontFamily: {
+                    sans: ['"Plus Jakarta Sans"', 'sans-serif'],
+                    mono: ['"JetBrains Mono"', 'monospace'],
+                },
+            }
+        }
+    }
+  </script>
+
+  <style>
+    .glass-card {
+      background: rgba(10, 30, 51, 0.7);
+      backdrop-filter: blur(16px);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    .cursor-blink::after {
+      content: '▋';
+      display: inline-block;
+      margin-left: 2px;
+      animation: blink 1s steps(2, start) infinite;
+      color: #bfeb30;
+    }
+    @keyframes blink { to { visibility: hidden; } }
+  </style>
+</head>
+<body class="bg-mejv-black text-mejv-white font-sans min-h-screen flex items-center justify-center p-4">
+  
+  <main class="w-full max-w-lg">
+    <div class="glass-card rounded-3xl p-8 sm:p-10 text-center space-y-8">
+      
+      <div class="space-y-2">
+        <h1 class="text-7xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-mejv-blue to-mejv-lime">404</h1>
+        <p class="text-slate-400 font-medium">Página no encontrada</p>
+      </div>
+
+      <div class="bg-mejv-black/60 rounded-2xl p-4 text-left font-mono text-xs border border-slate-800 space-y-2 h-[200px]">
+        <div class="flex items-center gap-1.5 mb-2 border-b border-slate-800 pb-2">
+          <span class="w-2.5 h-2.5 rounded-full bg-red-500"></span>
+          <span class="w-2.5 h-2.5 rounded-full bg-yellow-500"></span>
+          <span class="w-2.5 h-2.5 rounded-full bg-green-500"></span>
+          <span class="text-[10px] text-slate-500 ml-2">error_log.sh</span>
+        </div>
+        <p class="text-slate-400">[SYSTEM]: Iniciando búsqueda de recurso...</p>
+        <p class="text-slate-400">[SYSTEM]: Analizando ruta: <span class="text-mejv-white" id="path-log"></span></p>
+        <p class="text-red-400">[ERROR]: 404 - Recurso no localizado.</p>
+        <p class="text-mejv-lime cursor-blink" id="terminal-text">[SYSTEM]: Esperando comando del usuario...</p>
+      </div>
+
+      <a href="/" class="inline-block w-full py-4 rounded-xl bg-mejv-blue text-white font-bold hover:opacity-90 transition-all">
+        Volver a un lugar seguro
+      </a>
+
+    </div>
+  </main>
+
+  <script>
+    document.getElementById('path-log').textContent = window.location.pathname;
+
+    const messages = [
+        "[SYSTEM]: Analizando otras rutas...",
+        "[SYSTEM]: ¿Quizás buscabas otra cosa?",
+        "[SYSTEM]: Reintentando conexión...",
+        "[SYSTEM]: Esperando comando del usuario..."
+    ];
+    let index = 0;
+    const terminalEl = document.getElementById('terminal-text');
+
+    setInterval(() => {
+      index = (index + 1) % messages.length;
+      terminalEl.textContent = messages[index];
+    }, 3000);
+  </script>
+</body>
+</html>

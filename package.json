@@ -1,0 +1,38 @@
+{
+  "name": "mejv",
+  "version": "1.0.0",
+  "description": "Dominio principal personal Marzio Van Heyl",
+  "keywords": [
+    "mejv",
+    "marzio",
+    "delivery",
+    "mjfood",
+    "countdown"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/DrkBotBase"
+  },
+  "license": "ISC",
+  "author": "DarkBox",
+  "type": "commonjs",
+  "main": "app.js",
+  "scripts": {
+    "start": "node app.js",
+    "dev": "nodemon app.js"
+  },
+  "dependencies": {
+    "axios": "^1.13.2",
+    "bcryptjs": "^3.0.3",
+    "cors": "file:.2.8.5",
+    "dotenv": "^16.0.3",
+    "ejs": "^5.0.1",
+    "express": "^5.2.1",
+    "express-session": "file:.1.19.0",
+    "mongoose": "^9.3.0",
+    "resend": "^6.18.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.14"
+  }
+}
