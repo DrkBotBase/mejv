@@ -1,0 +1,13 @@
+<!doctype html>
+<html lang="es" class="dark"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Acceso · Campañas WhatsApp</title><script src="https://cdn.tailwindcss.com"></script></head>
+<body class="min-h-screen bg-slate-950 text-white flex items-center justify-center p-6">
+  <main class="w-full max-w-md rounded-3xl border border-slate-800 bg-slate-900 p-8 shadow-2xl">
+    <div class="mb-8"><p class="text-xs uppercase tracking-[.25em] text-lime-300">MEJV / TRACKING</p><h1 class="mt-3 text-3xl font-bold">Panel de campañas</h1><p class="mt-2 text-slate-400">Administra tus enlaces y mide cada conversación.</p></div>
+    <% if (error) { %><div class="mb-5 rounded-xl border border-red-900 bg-red-950/50 px-4 py-3 text-sm text-red-200"><%= error %></div><% } %>
+    <form method="post" action="/admin/login" class="space-y-5">
+      <label class="block text-sm text-slate-300">Usuario<input name="username" required autocomplete="username" class="mt-2 w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 outline-none focus:border-lime-300"></label>
+      <label class="block text-sm text-slate-300">Contraseña<input type="password" name="password" required autocomplete="current-password" class="mt-2 w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 outline-none focus:border-lime-300"></label>
+      <button class="w-full rounded-xl bg-lime-300 px-4 py-3 font-bold text-slate-950 transition hover:bg-lime-200">Entrar al panel</button>
+    </form>
+  </main>
+</body></html>
