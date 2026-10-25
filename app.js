@@ -30,9 +30,12 @@ const app = express();
 app.set('trust proxy', 1);
 
 app.use(cors({
-  origin: 'https://portfolio.mejv.pro',
-  methods: ['POST'],
-  allowedHeaders: ['Content-Type']
+  origin: [
+    'https://portfolio.mejv.pro',
+    'https://dl.mejv.pro'
+  ],
+  methods: ['GET', 'POST', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'x-client-secret']
 }));
 
 app.use(express.json({ limit: '20kb' }));
@@ -622,6 +625,91 @@ app.post('/contacto', contactLimiter, async (req, res) => {
     return res.status(500).json({
       message: 'Error interno al enviar el correo.'
     });
+  }
+});
+
+// api de ytdl
+const API_KEY = process.env.API_KEY || '';
+const API_BASE = process.env.API_BASE || '';
+const cache = new Map();
+const CACHE_TTL = 5 * 60 * 1000;
+function cacheKey(url, type) { return `${url}|${type}`; }
+function getCached(key) {
+  const entry = cache.get(key);
+  if (!entry || Date.now() > entry.expires) { cache.delete(key); return null; }
+  return entry.data;
+}
+function setCached(key, data) {
+  cache.set(key, { data, expires: Date.now() + CACHE_TTL });
+  if (cache.size > 500) {
+    const now = Date.now();
+    for (const [k, v] of cache) if (now > v.expires) cache.delete(k);
+  }
+}
+async function fetchNeoxr(endpoint, params, retries = 2) {
+  const key = cacheKey(endpoint + JSON.stringify(params), params.type || 'default');
+  const cached = getCached(key);
+  if (cached) return cached;
+
+  for (let i = 0; i <= retries; i++) {
+    try {
+      const { data } = await axios.get(`${API_BASE}${endpoint}`, {
+        params: { ...params, apikey: API_KEY },
+        timeout: 20000,
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          'Accept': 'application/json',
+        },
+        validateStatus: () => true,
+      });
+
+      if (!data || data.status !== true) {
+        throw new Error((data && data.message) || 'Error en la API de Neoxr');
+      }
+      setCached(key, data);
+      return data;
+    } catch (error) {
+      const status = error.response ? error.response.status : null;
+      const isCf5xx = [520, 521, 522, 523, 524, 525, 526].includes(status);
+      
+      if ((isCf5xx || !error.response) && i < retries) {
+        await new Promise(r => setTimeout(r, 1000 * (i + 1)));
+        continue;
+      }
+      throw error;
+    }
+  }
+}
+app.get('/api/resolve', async (req, res) => {
+  const { url, type, platform, quality } = req.query;
+  if (!url || !type) return res.status(400).json({ status: false, error: 'Faltan parámetros' });
+
+  try {
+    let data;
+    if (platform === 'youtube') {
+      const videoQuality = quality || '360p'; 
+      const audioQuality = '128kbps'; 
+      
+      const finalQuality = type === 'audio' ? audioQuality : videoQuality;
+      
+      data = await fetchNeoxr('/youtube', { url, type, quality: finalQuality });
+    } else if (platform === 'spotify') {
+      data = await fetchNeoxr('/spotify', { url });
+    } else {
+      return res.status(400).json({ status: false, error: 'Plataforma no soportada' });
+    }
+
+    const fileUrl = data.data.url;
+    const filename = data.data.filename || `file_${Date.now()}`;
+
+    return res.json({
+      status: true,
+      data: { url: fileUrl, filename: filename }
+    });
+
+  } catch (error) {
+    console.error('[API Error]', error.message);
+    return res.status(500).json({ status: false, error: error.message });
   }
 });
 
