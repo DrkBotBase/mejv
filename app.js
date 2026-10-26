@@ -1,5 +1,4 @@
 require('dotenv').config();
-
 const express = require('express');
 const axios = require('axios');
 const path = require('path');
@@ -29,7 +28,6 @@ const app = express();
 // ==================================================
 
 app.set('trust proxy', 1);
-
 app.use(cors({
   origin: [
     'https://portfolio.mejv.pro',
@@ -66,7 +64,7 @@ const resend = resendApiKey ? new Resend(resendApiKey) : null;
 
 const contactLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  limit: 5,
+  limit: 3,
   standardHeaders: 'draft-8',
   legacyHeaders: false,
   message: {
@@ -629,9 +627,9 @@ app.post('/contacto', contactLimiter, async (req, res) => {
   }
 });
 
-// api de ytdl
 const API_KEY = process.env.API_KEY || '';
 const API_BASE = process.env.API_BASE || '';
+const TOKEN_SCRAP = process.env.TOKEN_SCRAP || 'dFdnWkI3';
 const cache = new Map();
 const CACHE_TTL = 5 * 60 * 1000;
 function cacheKey(url, type) { return `${url}|${type}`; }
@@ -681,6 +679,39 @@ async function fetchNeoxr(endpoint, params, retries = 2) {
     }
   }
 }
+async function scrapeTikTok(tiktokUrl) {
+  try {
+    const payload = new URLSearchParams({
+      id: tiktokUrl,
+      locale: 'en',
+      tt: TOKEN_SCRAP
+    });
+
+    const response = await axios.post('https://ssstik.io/abc?url=dl', payload, {
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Referer': 'https://ssstik.io/en',
+        'Origin': 'https://ssstik.io',
+        'Accept': '*/*'
+      },
+      timeout: 15000
+    });
+
+    const html = response.data;
+    const regex = /<a\b(?=[^>]*\bclass="[^"]*\bwithout_watermark\b(?!_hd)[^"]*")(?=[^>]*\bhref="([^"]+)")[^>]*>/i;
+    const match = html.match(regex);
+
+    if (match && match[1]) {
+      return match[1];
+    }
+    
+    return null;
+  } catch (error) {
+    console.error('[Scraper TikTok Error]:', error.message);
+    return null;
+  }
+}
 app.get('/api/resolve', async (req, res) => {
   const { url, type, platform, quality } = req.query;
   if (!url || !type) return res.status(400).json({ status: false, error: 'Faltan parámetros' });
@@ -705,10 +736,15 @@ app.get('/api/resolve', async (req, res) => {
       filename = `audio_${Date.now()}.mp3`;
 
     } else if (platform === 'tiktok') {
-      data = await fetchNeoxr('/tiktok', { url });
-      console.log(data)
-      rawFileUrl = data.data.videoWM || data.data.video;
-      filename = `tiktok_${data.data.id || Date.now()}.mp4`;
+      rawFileUrl = await scrapeTikTok(url);
+      filename = `tiktok_${Date.now()}.mp4`;
+
+      if (!rawFileUrl) {
+        //console.warn('[Scraper Error] Activando respaldo...');
+        data = await fetchNeoxr('/tiktok', { url });
+        rawFileUrl = data.data.videoWM || data.data.video;
+        filename = `tiktok_${data.data.id || Date.now()}.mp4`;
+      }
       
     } else {
       return res.status(400).json({ status: false, error: 'Plataforma no soportada' });
