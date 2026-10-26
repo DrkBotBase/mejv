@@ -654,9 +654,9 @@ async function fetchNeoxr(endpoint, params, retries = 2) {
 
   for (let i = 0; i <= retries; i++) {
     try {
-      const { data } = await axios.get(`${API_BASE}${endpoint}`, {
-        params: { ...params, apikey: API_KEY },
-        timeout: 20000,
+      const { data } = await axios.get(`${NEOXR_BASE}${endpoint}`, {
+        params: { ...params, apikey: NEOXR_API_KEY },
+        timeout: 45000,
         headers: {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
           'Accept': 'application/json',
@@ -665,7 +665,7 @@ async function fetchNeoxr(endpoint, params, retries = 2) {
       });
 
       if (!data || data.status !== true) {
-        throw new Error((data && data.message) || 'Error en la API de Neoxr');
+        throw new Error((data && data.message) || 'Error en la API');
       }
       setCached(key, data);
       return data;
@@ -706,6 +706,7 @@ app.get('/api/resolve', async (req, res) => {
 
     } else if (platform === 'tiktok') {
       data = await fetchNeoxr('/tiktok', { url });
+      console.log(data)
       rawFileUrl = data.data.videoWM || data.data.video;
       filename = `tiktok_${data.data.id || Date.now()}.mp4`;
       
@@ -725,7 +726,7 @@ app.get('/api/resolve', async (req, res) => {
         filename: filename
       }, {
         headers: { 'Content-Type': 'application/json' },
-        timeout: 10000
+        timeout: 45000
       });
 
       if (signResponse.data && signResponse.data.status && signResponse.data.data && signResponse.data.data.signed_url) {
