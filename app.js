@@ -655,7 +655,7 @@ async function fetchNeoxr(endpoint, params, retries = 2) {
   for (let i = 0; i <= retries; i++) {
     try {
       const { data } = await axios.get(`${API_BASE}${endpoint}`, {
-        params: { ...params, apikey: NEOXR_API_KEY },
+        params: { ...params, apikey: API_KEY },
         timeout: 45000,
         headers: {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
