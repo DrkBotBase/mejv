@@ -687,25 +687,60 @@ app.get('/api/resolve', async (req, res) => {
 
   try {
     let data;
+    let rawFileUrl;
+    let filename;
+
     if (platform === 'youtube') {
       const videoQuality = quality || '360p'; 
       const audioQuality = '128kbps'; 
-      
       const finalQuality = type === 'audio' ? audioQuality : videoQuality;
       
       data = await fetchNeoxr('/youtube', { url, type, quality: finalQuality });
+      rawFileUrl = data.data.url;
+      filename = data.data.filename || `video_${Date.now()}.mp4`;
+
     } else if (platform === 'spotify') {
       data = await fetchNeoxr('/spotify', { url });
+      rawFileUrl = data.data.url;
+      filename = `audio_${Date.now()}.mp3`;
+
+    } else if (platform === 'tiktok') {
+      data = await fetchNeoxr('/tiktok', { url });
+      rawFileUrl = data.data.videoWM || data.data.video;
+      filename = `tiktok_${data.data.id || Date.now()}.mp4`;
+      
     } else {
       return res.status(400).json({ status: false, error: 'Plataforma no soportada' });
     }
 
-    const fileUrl = data.data.url;
-    const filename = data.data.filename || `file_${Date.now()}`;
+    if (!rawFileUrl) {
+      throw new Error('No se pudo obtener el enlace del archivo.');
+    }
+    
+    let finalSignedUrl = rawFileUrl;
+
+    try {
+      const signResponse = await axios.post('https://secure-signed.pages.dev/api/sign', {
+        target_url: rawFileUrl,
+        filename: filename
+      }, {
+        headers: { 'Content-Type': 'application/json' },
+        timeout: 10000
+      });
+
+      if (signResponse.data && signResponse.data.status && signResponse.data.data && signResponse.data.data.signed_url) {
+        finalSignedUrl = signResponse.data.data.signed_url;
+      }
+    } catch (signError) {
+      console.warn('[Sign Error] No se pudo firmar la URL, usando la original:', signError.message);
+    }
 
     return res.json({
       status: true,
-      data: { url: fileUrl, filename: filename }
+      data: { 
+        url: finalSignedUrl, 
+        filename: filename 
+      }
     });
 
   } catch (error) {
