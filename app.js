@@ -699,16 +699,78 @@ async function scrapeTikTok(tiktokUrl) {
     });
 
     const html = response.data;
-    const regex = /<a\b(?=[^>]*\bclass="[^"]*\bwithout_watermark\b(?!_hd)[^"]*")(?=[^>]*\bhref="([^"]+)")[^>]*>/i;
-    const match = html.match(regex);
 
-    if (match && match[1]) {
-      return match[1];
+    const regexVideo = /<a\b(?=[^>]*\bclass="[^"]*\bwithout_watermark\b(?!_hd)[^"]*")(?=[^>]*\bhref="([^"]+)")[^>]*>/i;
+    const matchVideo = html.match(regexVideo);
+    if (matchVideo && matchVideo[1]) {
+      return { type: 'video', urls: [matchVideo[1]] };
     }
-    
+
+    const regexSlides = /<a\b(?=[^>]*\bclass="[^"]*\bdownload_link\b[^"]*\bslide\b[^"]*")(?=[^>]*\bhref="([^"]+)")[^>]*>/gi;
+    const urls = [];
+    let m;
+    while ((m = regexSlides.exec(html)) !== null) {
+      if (m[1] && !urls.includes(m[1])) urls.push(m[1]);
+    }
+    if (urls.length > 0) {
+      return { type: 'images', urls };
+    }
+
     return null;
   } catch (error) {
     console.error('[Scraper TikTok Error]:', error.message);
+    return null;
+  }
+}
+async function scrapePinterest(pinterestUrl) {
+  try {
+    const tokenRes = await axios.post('https://ssspin.io/action/token', new URLSearchParams({
+      url: pinterestUrl,
+      lang: 'es'
+    }), {
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+      }
+    });
+
+    if (!tokenRes.data || !tokenRes.data.success || !tokenRes.data.token) {
+      throw new Error('No se pudo obtener el token de ssspin.io');
+    }
+
+    const vtoken = tokenRes.data.token;
+
+    const actionRes = await axios.post('https://ssspin.io/action', new URLSearchParams({
+      lang: 'es',
+      url: pinterestUrl,
+      vtoken: vtoken
+    }), {
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Referer': 'https://ssspin.io/es'
+      }
+    });
+
+    if (!actionRes.data || !actionRes.data.success || !actionRes.data.html) {
+      throw new Error('s sspin.io no devolvió el HTML de descarga');
+    }
+
+    const html = actionRes.data.html;
+    const regex = /<div class='result_actions'>[\s\S]*?<a href='([^']+)'/i;
+    const match = html.match(regex);
+
+    if (match && match[1]) {
+      return {
+        url: match[1],
+        isVideo: html.includes('meta-video'),
+        title: html.match(/<p class='title'>([^<]+)<\/p>/)?.[1]?.trim() || 'Pinterest Media'
+      };
+    }
+
+    throw new Error('No se encontró el enlace de descarga en el HTML');
+  } catch (error) {
+    console.error('[Pinterest Scraper Error]:', error.message);
     return null;
   }
 }
@@ -734,18 +796,41 @@ app.get('/api/resolve', async (req, res) => {
       data = await fetchNeoxr('/spotify', { url });
       rawFileUrl = data.data.url;
       filename = `audio_${Date.now()}.mp3`;
-
+      
     } else if (platform === 'tiktok') {
-      rawFileUrl = await scrapeTikTok(url);
-      filename = `tiktok_${Date.now()}.mp4`;
-
-      if (!rawFileUrl) {
-        //console.warn('[Scraper Error] Activando respaldo...');
+      const result = await scrapeTikTok(url);
+    
+      if (!result) {
         data = await fetchNeoxr('/tiktok', { url });
+    
+        if (data.data.images && Array.isArray(data.data.images) && data.data.images.length > 0) {
+          return res.json({
+            status: true,
+            type: 'images',
+            data: {
+              images: data.data.images,
+              total: data.data.images.length
+            }
+          });
+        }
+    
         rawFileUrl = data.data.videoWM || data.data.video;
         filename = `tiktok_${data.data.id || Date.now()}.mp4`;
+    
+      } else if (result.type === 'images') {
+        return res.json({
+          status: true,
+          type: 'images',
+          data: {
+            images: result.urls,
+            total: result.urls.length
+          }
+        });
+    
+      } else {
+        rawFileUrl = result.urls[0];
+        filename = `tiktok_${Date.now()}.mp4`;
       }
-      
     } else {
       return res.status(400).json({ status: false, error: 'Plataforma no soportada' });
     }
@@ -753,9 +838,8 @@ app.get('/api/resolve', async (req, res) => {
     if (!rawFileUrl) {
       throw new Error('No se pudo obtener el enlace del archivo.');
     }
-    
     let finalSignedUrl = rawFileUrl;
-
+    console.log(rawFileUrl)
     try {
       const signResponse = await axios.post('https://secure-signed.pages.dev/api/sign', {
         target_url: rawFileUrl,
@@ -774,6 +858,7 @@ app.get('/api/resolve', async (req, res) => {
 
     return res.json({
       status: true,
+      type: 'video',
       data: { 
         url: finalSignedUrl, 
         filename: filename 
