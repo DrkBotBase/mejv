@@ -23,10 +23,6 @@ const {
 
 const app = express();
 
-// ==================================================
-// CONFIGURACIÓN GENERAL
-// ==================================================
-
 app.set('trust proxy', 1);
 app.use(cors({
   origin: [
@@ -58,10 +54,7 @@ app.use(session({
 
 const resend = resendApiKey ? new Resend(resendApiKey) : null;
 
-// ==================================================
-// LÍMITE DE SOLICITUDES PARA EL FORMULARIO
-// ==================================================
-
+// Limite para el form
 const contactLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   limit: 3,
@@ -72,10 +65,7 @@ const contactLimiter = rateLimit({
   }
 });
 
-// ==================================================
-// MODELOS DE CAMPAÑAS Y CLICS
-// ==================================================
-
+// Modelo Campañas
 const campaignSchema = new mongoose.Schema({
   slug: {
     type: String,
@@ -110,7 +100,6 @@ const campaignSchema = new mongoose.Schema({
     default: Date.now
   }
 });
-
 const clickSchema = new mongoose.Schema({
   campaign: {
     type: mongoose.Schema.Types.ObjectId,
@@ -138,19 +127,14 @@ const clickSchema = new mongoose.Schema({
     default: Date.now
   }
 });
-
 const Campaign =
   mongoose.models.Campaign ||
   mongoose.model('Campaign', campaignSchema);
-
 const Click =
   mongoose.models.Click ||
   mongoose.model('Click', clickSchema);
 
-// ==================================================
-// CONEXIÓN CON MONGODB
-// ==================================================
-
+// MongoDB
 let mongoReady = false;
 let mongoConnectionPromise = null;
 
@@ -193,14 +177,10 @@ async function connectMongo() {
   return mongoConnectionPromise;
 }
 
-// ==================================================
 // FUNCIONES AUXILIARES
-// ==================================================
-
 function isAdmin(req) {
   return Boolean(req.session && req.session.isAdmin);
 }
-
 function requireAdmin(req, res, next) {
   if (isAdmin(req)) {
     return next();
@@ -208,7 +188,6 @@ function requireAdmin(req, res, next) {
 
   return res.redirect('/admin/login');
 }
-
 function normalizeSlug(value) {
   return String(value || '')
     .trim()
@@ -217,11 +196,9 @@ function normalizeSlug(value) {
     .replace(/^-+|-+$/g, '')
     .slice(0, 80);
 }
-
 function getClientIp(req) {
   return String(req.ip || '');
 }
-
 function escapeHTML(value) {
   const entities = {
     '&': '&amp;',
@@ -236,19 +213,12 @@ function escapeHTML(value) {
   });
 }
 
-// ==================================================
-// PÁGINA PRINCIPAL
-// ==================================================
-
+// Index
 app.get('/', (req, res) => {
   res.render('landing', { info });
 });
 
-// ==================================================
-// TRACKING DE CAMPAÑAS DE WHATSAPP
-// URL DE EJEMPLO: /wa?campaign=mi-campana
-// ==================================================
-
+// Tracking
 app.get('/wa', async (req, res) => {
   try {
     const slug = normalizeSlug(req.query.campaign);
@@ -318,10 +288,7 @@ app.get('/wa', async (req, res) => {
   }
 });
 
-// ==================================================
-// LOGIN DE ADMINISTRACIÓN
-// ==================================================
-
+// Auth
 app.get('/admin/login', (req, res) => {
   if (isAdmin(req)) {
     return res.redirect('/admin/campaigns');
@@ -329,7 +296,6 @@ app.get('/admin/login', (req, res) => {
 
   return res.render('admin-login', { error: null });
 });
-
 app.post('/admin/login', (req, res, next) => {
   const { username, password } = req.body || {};
 
@@ -368,7 +334,6 @@ app.post('/admin/login', (req, res, next) => {
     });
   });
 });
-
 app.post('/admin/logout', requireAdmin, (req, res, next) => {
   req.session.destroy((error) => {
     if (error) {
@@ -380,10 +345,7 @@ app.post('/admin/logout', requireAdmin, (req, res, next) => {
   });
 });
 
-// ==================================================
-// LISTADO DE CAMPAÑAS
-// ==================================================
-
+// Campaña
 app.get('/admin/campaigns', requireAdmin, async (req, res) => {
   try {
     const connected = await connectMongo();
@@ -412,11 +374,6 @@ app.get('/admin/campaigns', requireAdmin, async (req, res) => {
     );
   }
 });
-
-// ==================================================
-// CREAR CAMPAÑA
-// ==================================================
-
 app.post('/admin/campaigns', requireAdmin, async (req, res) => {
   try {
     const connected = await connectMongo();
@@ -463,15 +420,7 @@ app.post('/admin/campaigns', requireAdmin, async (req, res) => {
     );
   }
 });
-
-// ==================================================
-// ACTIVAR O DESACTIVAR CAMPAÑA
-// ==================================================
-
-app.post(
-  '/admin/campaigns/:id/toggle',
-  requireAdmin,
-  async (req, res) => {
+app.post('/admin/campaigns/:id/toggle',requireAdmin, async (req, res) => {
     try {
       const connected = await connectMongo();
 
@@ -500,14 +449,9 @@ app.post(
         'No se pudo actualizar la campaña.'
       );
     }
-  }
-);
+  });
 
-// ==================================================
-// FORMULARIO DE CONTACTO - RESEND
-// POST /contacto
-// ==================================================
-
+// Contacto
 app.post('/contacto', contactLimiter, async (req, res) => {
   if (!resend || !gmail) {
     return res.status(500).json({
@@ -627,270 +571,21 @@ app.post('/contacto', contactLimiter, async (req, res) => {
   }
 });
 
-const API_KEY = process.env.API_KEY || '';
-const API_BASE = process.env.API_BASE || '';
-const TOKEN_SCRAP = process.env.TOKEN_SCRAP || 'dFdnWkI3';
-const cache = new Map();
-const CACHE_TTL = 5 * 60 * 1000;
-function cacheKey(url, type) { return `${url}|${type}`; }
-function getCached(key) {
-  const entry = cache.get(key);
-  if (!entry || Date.now() > entry.expires) { cache.delete(key); return null; }
-  return entry.data;
-}
-function setCached(key, data) {
-  cache.set(key, { data, expires: Date.now() + CACHE_TTL });
-  if (cache.size > 500) {
-    const now = Date.now();
-    for (const [k, v] of cache) if (now > v.expires) cache.delete(k);
-  }
-}
-async function fetchNeoxr(endpoint, params, retries = 2) {
-  const key = cacheKey(endpoint + JSON.stringify(params), params.type || 'default');
-  const cached = getCached(key);
-  if (cached) return cached;
-
-  for (let i = 0; i <= retries; i++) {
-    try {
-      const { data } = await axios.get(`${API_BASE}${endpoint}`, {
-        params: { ...params, apikey: API_KEY },
-        timeout: 45000,
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-          'Accept': 'application/json',
-        },
-        validateStatus: () => true,
-      });
-
-      if (!data || data.status !== true) {
-        throw new Error((data && data.message) || 'Error en la API');
-      }
-      setCached(key, data);
-      return data;
-    } catch (error) {
-      const status = error.response ? error.response.status : null;
-      const isCf5xx = [520, 521, 522, 523, 524, 525, 526].includes(status);
-      
-      if ((isCf5xx || !error.response) && i < retries) {
-        await new Promise(r => setTimeout(r, 1000 * (i + 1)));
-        continue;
-      }
-      throw error;
-    }
-  }
-}
-async function scrapeTikTok(tiktokUrl) {
-  try {
-    const payload = new URLSearchParams({
-      id: tiktokUrl,
-      locale: 'en',
-      tt: TOKEN_SCRAP
-    });
-
-    const response = await axios.post('https://ssstik.io/abc?url=dl', payload, {
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Referer': 'https://ssstik.io/en',
-        'Origin': 'https://ssstik.io',
-        'Accept': '*/*'
-      },
-      timeout: 15000
-    });
-
-    const html = response.data;
-
-    const regexVideo = /<a\b(?=[^>]*\bclass="[^"]*\bwithout_watermark\b(?!_hd)[^"]*")(?=[^>]*\bhref="([^"]+)")[^>]*>/i;
-    const matchVideo = html.match(regexVideo);
-    if (matchVideo && matchVideo[1]) {
-      return { type: 'video', urls: [matchVideo[1]] };
-    }
-
-    const regexSlides = /<a\b(?=[^>]*\bclass="[^"]*\bdownload_link\b[^"]*\bslide\b[^"]*")(?=[^>]*\bhref="([^"]+)")[^>]*>/gi;
-    const urls = [];
-    let m;
-    while ((m = regexSlides.exec(html)) !== null) {
-      if (m[1] && !urls.includes(m[1])) urls.push(m[1]);
-    }
-    if (urls.length > 0) {
-      return { type: 'images', urls };
-    }
-
-    return null;
-  } catch (error) {
-    console.error('[Scraper TikTok Error]:', error.message);
-    return null;
-  }
-}
-async function scrapePinterest(pinterestUrl) {
-  try {
-    const tokenRes = await axios.post('https://ssspin.io/action/token', new URLSearchParams({
-      url: pinterestUrl,
-      lang: 'es'
-    }), {
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-      }
-    });
-
-    if (!tokenRes.data || !tokenRes.data.success || !tokenRes.data.token) {
-      throw new Error('No se pudo obtener el token de ssspin.io');
-    }
-
-    const vtoken = tokenRes.data.token;
-
-    const actionRes = await axios.post('https://ssspin.io/action', new URLSearchParams({
-      lang: 'es',
-      url: pinterestUrl,
-      vtoken: vtoken
-    }), {
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-        'Referer': 'https://ssspin.io/es'
-      }
-    });
-
-    if (!actionRes.data || !actionRes.data.success || !actionRes.data.html) {
-      throw new Error('s sspin.io no devolvió el HTML de descarga');
-    }
-
-    const html = actionRes.data.html;
-    const regex = /<div class='result_actions'>[\s\S]*?<a href='([^']+)'/i;
-    const match = html.match(regex);
-
-    if (match && match[1]) {
-      return {
-        url: match[1],
-        isVideo: html.includes('meta-video'),
-        title: html.match(/<p class='title'>([^<]+)<\/p>/)?.[1]?.trim() || 'Pinterest Media'
-      };
-    }
-
-    throw new Error('No se encontró el enlace de descarga en el HTML');
-  } catch (error) {
-    console.error('[Pinterest Scraper Error]:', error.message);
-    return null;
-  }
-}
-app.get('/api/resolve', async (req, res) => {
-  const { url, type, platform, quality } = req.query;
-  if (!url || !type) return res.status(400).json({ status: false, error: 'Faltan parámetros' });
-
-  try {
-    let data;
-    let rawFileUrl;
-    let filename;
-
-    if (platform === 'youtube') {
-      const videoQuality = quality || '360p'; 
-      const audioQuality = '128kbps'; 
-      const finalQuality = type === 'audio' ? audioQuality : videoQuality;
-      
-      data = await fetchNeoxr('/youtube', { url, type, quality: finalQuality });
-      rawFileUrl = data.data.url;
-      filename = data.data.filename || `video_${Date.now()}.mp4`;
-
-    } else if (platform === 'spotify') {
-      data = await fetchNeoxr('/spotify', { url });
-      rawFileUrl = data.data.url;
-      filename = `audio_${Date.now()}.mp3`;
-      
-    } else if (platform === 'tiktok') {
-      const result = await scrapeTikTok(url);
-    
-      if (!result) {
-        data = await fetchNeoxr('/tiktok', { url });
-    
-        if (data.data.images && Array.isArray(data.data.images) && data.data.images.length > 0) {
-          return res.json({
-            status: true,
-            type: 'images',
-            data: {
-              images: data.data.images,
-              total: data.data.images.length
-            }
-          });
-        }
-    
-        rawFileUrl = data.data.videoWM || data.data.video;
-        filename = `tiktok_${data.data.id || Date.now()}.mp4`;
-    
-      } else if (result.type === 'images') {
-        return res.json({
-          status: true,
-          type: 'images',
-          data: {
-            images: result.urls,
-            total: result.urls.length
-          }
-        });
-    
-      } else {
-        rawFileUrl = result.urls[0];
-        filename = `tiktok_${Date.now()}.mp4`;
-      }
-    } else {
-      return res.status(400).json({ status: false, error: 'Plataforma no soportada' });
-    }
-
-    if (!rawFileUrl) {
-      throw new Error('No se pudo obtener el enlace del archivo.');
-    }
-    let finalSignedUrl = rawFileUrl;
-    console.log(rawFileUrl)
-    try {
-      const signResponse = await axios.post('https://secure-signed.pages.dev/api/sign', {
-        target_url: rawFileUrl,
-        filename: filename
-      }, {
-        headers: { 'Content-Type': 'application/json' },
-        timeout: 45000
-      });
-
-      if (signResponse.data && signResponse.data.status && signResponse.data.data && signResponse.data.data.signed_url) {
-        finalSignedUrl = signResponse.data.data.signed_url;
-      }
-    } catch (signError) {
-      console.warn('[Sign Error] No se pudo firmar la URL, usando la original:', signError.message);
-    }
-
-    return res.json({
-      status: true,
-      type: 'video',
-      data: { 
-        url: finalSignedUrl, 
-        filename: filename 
-      }
-    });
-
-  } catch (error) {
-    console.error('[API Error]', error.message);
-    return res.status(500).json({ status: false, error: error.message });
-  }
-});
-
-// ==================================================
-// RUTA DE PRUEBA
-// ==================================================
-
+// Ping
 app.get('/ping', (req, res) => {
   res.send('Pong');
 });
 
-// ==================================================
-// PÁGINA 404
-// ==================================================
+// Api
+const apiRoutes = require('./routes/api');
+app.use('/api', apiRoutes);
 
+// 404
 app.use((req, res) => {
   res.status(404).render('404');
 });
 
-// ==================================================
-// MANEJO DE ERRORES
-// ==================================================
-
+// Errores
 app.use((error, req, res, next) => {
   console.error('Error del servidor:', error);
 
@@ -901,10 +596,7 @@ app.use((error, req, res, next) => {
   return res.status(500).send('Error interno del servidor.');
 });
 
-// ==================================================
 // INICIAR SERVIDOR
-// ==================================================
-
 if (require.main === module) {
   app.listen(PORT, () => {
     console.log(`🚀 Servidor corriendo en el puerto ${PORT}`);
