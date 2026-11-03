@@ -1,11 +1,36 @@
 const express = require('express');
+const mongoose = require('mongoose');
 const axios = require('axios');
 const router = express.Router();
 
 const { fetchNeoxr, fetchStellarwa } = require('../services/api-clients');
 const { scrapeTikTok } = require('../services/tiktok');
 const { scrapePinterest } = require('../services/pinterest');
+const { trackLimiter } = require('../utils/limiters');
 
+const usageSchema = new mongoose.Schema({
+  userId: { 
+    type: String, 
+    required: true, 
+    unique: true 
+  },
+  totalCount: { 
+    type: Number, 
+    default: 0 
+  },
+  platforms: {
+    type: Map,
+    of: Number,
+    default: {}
+  },
+  lastUsed: { 
+    type: Date, 
+    default: Date.now 
+  }
+});
+const Usage = 
+  mongoose.models.Usage || 
+  mongoose.model('Usage', usageSchema);
 router.get('/resolve', async (req, res) => {
   const { url, type, platform, quality } = req.query;
   
@@ -130,6 +155,40 @@ router.get('/resolve', async (req, res) => {
   } catch (error) {
     console.error('[API Error]', error.message);
     return res.status(500).json({ status: false, error: error.message });
+  }
+});
+router.post('/track-usage', trackLimiter, async (req, res) => {
+  try {
+    const { userId, platform } = req.body;
+    
+    if (!userId) {
+      return res.status(400).json({ status: false, error: 'Falta userId' });
+    }
+
+    if (mongoose.connection.readyState !== 1) {
+      return res.json({ status: true, message: 'Tracking omitido (BD offline)' });
+    }
+
+    const updateQuery = { 
+      $inc: { totalCount: 1 },
+      $set: { lastUsed: new Date() }
+    };
+
+    if (platform && typeof platform === 'string') {
+      const safePlatform = platform.toLowerCase().replace(/[^a-z]/g, '');
+      updateQuery.$inc[`platforms.${safePlatform}`] = 1;
+    }
+
+    await Usage.findOneAndUpdate(
+      { userId: userId },
+      updateQuery,
+      { upsert: true, new: true }
+    );
+
+    return res.json({ status: true });
+  } catch (error) {
+    console.error('[Track Usage Error]', error.message);
+    return res.json({ status: true, message: 'Error al registrar uso' });
   }
 });
 

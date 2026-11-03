@@ -7,7 +7,7 @@ const mongoose = require('mongoose');
 const crypto = require('crypto');
 const { Resend } = require('resend');
 const cors = require('cors');
-const { rateLimit } = require('express-rate-limit');
+const { contactLimiter } = require('./utils/limiters');
 
 const {
   info,
@@ -53,17 +53,6 @@ app.use(session({
 }));
 
 const resend = resendApiKey ? new Resend(resendApiKey) : null;
-
-// Limite para el form
-const contactLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  limit: 3,
-  standardHeaders: 'draft-8',
-  legacyHeaders: false,
-  message: {
-    message: 'Demasiadas solicitudes. Intenta nuevamente en 15 minutos.'
-  }
-});
 
 // Modelo Campañas
 const campaignSchema = new mongoose.Schema({
@@ -229,12 +218,8 @@ app.get('/wa', async (req, res) => {
       );
     }
 
-    const connected = await connectMongo();
-
-    if (!connected) {
-      return res.status(503).send(
-        'El tracking no está disponible temporalmente.'
-      );
+    if (mongoose.connection.readyState !== 1) {
+      return res.status(503).send('La base de datos no está disponible temporalmente.');
     }
 
     const campaign = await Campaign.findOne({
@@ -316,8 +301,6 @@ app.post('/admin/login', (req, res, next) => {
     });
   }
 
-  // Regenerar la sesión para reducir el riesgo
-  // de fijación de sesión.
   req.session.regenerate((error) => {
     if (error) {
       return next(error);
@@ -348,12 +331,8 @@ app.post('/admin/logout', requireAdmin, (req, res, next) => {
 // Campaña
 app.get('/admin/campaigns', requireAdmin, async (req, res) => {
   try {
-    const connected = await connectMongo();
-
-    if (!connected) {
-      return res.status(503).send(
-        'Configura MONGODB_URI para usar el panel.'
-      );
+    if (mongoose.connection.readyState !== 1) {
+      return res.status(503).send('La base de datos no está disponible temporalmente.');
     }
 
     const campaigns = await Campaign.find()
@@ -376,12 +355,8 @@ app.get('/admin/campaigns', requireAdmin, async (req, res) => {
 });
 app.post('/admin/campaigns', requireAdmin, async (req, res) => {
   try {
-    const connected = await connectMongo();
-
-    if (!connected) {
-      return res.status(503).send(
-        'Configura MONGODB_URI para usar el panel.'
-      );
+    if (mongoose.connection.readyState !== 1) {
+      return res.status(503).send('La base de datos no está disponible temporalmente.');
     }
 
     const slug = normalizeSlug(req.body.slug);
@@ -422,12 +397,8 @@ app.post('/admin/campaigns', requireAdmin, async (req, res) => {
 });
 app.post('/admin/campaigns/:id/toggle',requireAdmin, async (req, res) => {
     try {
-      const connected = await connectMongo();
-
-      if (!connected) {
-        return res.status(503).send(
-          'Configura MONGODB_URI para usar el panel.'
-        );
+      if (mongoose.connection.readyState !== 1) {
+        return res.status(503).send('La base de datos no está disponible temporalmente.');
       }
 
       if (!mongoose.isValidObjectId(req.params.id)) {
@@ -598,8 +569,16 @@ app.use((error, req, res, next) => {
 
 // INICIAR SERVIDOR
 if (require.main === module) {
+  connectMongo().then(connected => {
+    if (connected) {
+      console.log('DB On');
+    } else {
+      console.warn('DB error');
+    }
+  });
+
   app.listen(PORT, () => {
-    console.log(`🚀 Servidor corriendo en el puerto ${PORT}`);
+    console.log(`Server on port:${PORT}`);
   });
 }
 
