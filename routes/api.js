@@ -31,6 +31,29 @@ const usageSchema = new mongoose.Schema({
 const Usage = 
   mongoose.models.Usage || 
   mongoose.model('Usage', usageSchema);
+
+
+let isAccessEnabled = true; 
+router.get('/access', (req, res) => {
+    const { key, status } = req.query;
+    
+    const ADMIN_KEY = process.env.ADMIN_PASSWORD;
+    if (key && key === ADMIN_KEY) {
+        if (status === 'false') {
+            isAccessEnabled = false;
+        } else if (status === 'true') {
+            isAccessEnabled = true;
+        } else {
+            isAccessEnabled = !isAccessEnabled; 
+        }
+    }
+
+    return res.json({ 
+        status: isAccessEnabled,
+        timestamp: new Date().toISOString(),
+        message: isAccessEnabled ? 'Servicio activo' : 'Servicio en mantenimiento'
+    });
+});
 router.get('/resolve', async (req, res) => {
   const { url, type, platform, quality } = req.query;
   
