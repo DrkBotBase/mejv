@@ -3,6 +3,18 @@ const mongoose = require('mongoose');
 const axios = require('axios');
 const router = express.Router();
 
+// whatmusic
+const multer = require('multer');
+const FormData = require('form-data');
+const ffmpeg = require('fluent-ffmpeg');
+const ffmpegPath = require('ffmpeg-static');
+
+const fs = require('fs');
+const fsp = fs.promises;
+const os = require('os');
+const path = require('path');
+const crypto = require('crypto');
+
 const { fetchNeoxr, fetchStellarwa } = require('../services/api-clients');
 const { scrapeTikTok } = require('../services/tiktok');
 const { scrapePinterest } = require('../services/pinterest');
@@ -213,6 +225,201 @@ router.post('/track-usage', trackLimiter, async (req, res) => {
     console.error('[Track Usage Error]', error.message);
     return res.json({ status: true, message: 'Error al registrar uso' });
   }
+});
+
+if (!ffmpegPath) {
+    throw new Error('No se encontró el binario de FFmpeg.');
+}
+ffmpeg.setFfmpegPath(ffmpegPath);
+const upload = multer({
+    storage: multer.memoryStorage(),
+    limits: {
+        fileSize: 10 * 1024 * 1024
+    },
+    fileFilter: (req, file, callback) => {
+        if (!file.mimetype || !file.mimetype.startsWith('audio/')) {
+            return callback(new Error('Solo se permiten archivos de audio.'));
+        }
+
+        callback(null, true);
+    }
+});
+function getInputFormat(mimeType = '') {
+    const baseMimeType = mimeType
+        .toLowerCase()
+        .split(';')[0]
+        .trim();
+
+    const formats = {
+        'audio/webm': 'webm',
+        'audio/ogg': 'ogg',
+        'audio/mp4': 'mp4',
+        'audio/m4a': 'mp4',
+        'audio/x-m4a': 'mp4',
+        'audio/mpeg': 'mp3'
+    };
+
+    return formats[baseMimeType] || null;
+}
+async function convertAudioToMp3(buffer, mimeType) {
+    const tempDir = await fsp.mkdtemp(
+        path.join(os.tmpdir(), 'mejv-audio-')
+    );
+
+    const inputPath = path.join(
+        tempDir,
+        `input-${crypto.randomUUID()}`
+    );
+
+    const outputPath = path.join(
+        tempDir,
+        `output-${crypto.randomUUID()}.mp3`
+    );
+
+    try {
+        await fsp.writeFile(inputPath, buffer);
+
+        const inputFormat = getInputFormat(mimeType);
+
+        await new Promise((resolve, reject) => {
+            let command = ffmpeg(inputPath);
+
+            if (inputFormat) {
+                command = command.inputFormat(inputFormat);
+            }
+
+            command
+                .audioCodec('libmp3lame')
+                .audioBitrate('128k')
+                .audioChannels(1)
+                .audioFrequency(44100)
+                .format('mp3')
+                .on('end', resolve)
+                .on('error', reject)
+                .save(outputPath);
+        });
+
+        const mp3Buffer = await fsp.readFile(outputPath);
+
+        if (!mp3Buffer.length) {
+            throw new Error('FFmpeg generó un archivo MP3 vacío.');
+        }
+
+        return mp3Buffer;
+    } finally {
+        await fsp.rm(tempDir, {
+            recursive: true,
+            force: true
+        });
+    }
+}
+router.post('/whatmusic', upload.single('audio'), async (req, res) => {
+    try {
+        if (!req.file) {
+            return res.status(400).json({
+                status: false,
+                error: 'No se envió ningún audio.'
+            });
+        }
+
+        const mp3Buffer = await convertAudioToMp3(
+            req.file.buffer,
+            req.file.mimetype
+        );
+
+        const formData = new FormData();
+
+        formData.append('file', mp3Buffer, {
+            filename: 'grabacion.mp3',
+            contentType: 'audio/mpeg',
+            knownLength: mp3Buffer.length
+        });
+
+        const uploadResponse = await axios.post(
+            'https://tmpfiles.org/api/v1/upload',
+            formData,
+            {
+                headers: formData.getHeaders(),
+                maxBodyLength: Infinity,
+                maxContentLength: Infinity,
+                timeout: 15000
+            }
+        );
+
+        const temporaryUrl = uploadResponse.data?.data?.url;
+
+        if (!temporaryUrl) {
+            throw new Error(
+                'tmpfiles.org no devolvió una URL válida.'
+            );
+        }
+
+        const directUrl = temporaryUrl.includes('/dl/')
+            ? temporaryUrl
+            : temporaryUrl.replace(
+                'tmpfiles.org/',
+                'tmpfiles.org/dl/'
+            );
+
+        const neoxrResponse = await fetchNeoxr(
+            '/whatmusic',
+            {
+                url: directUrl
+            }
+        );
+
+        return res.json(neoxrResponse);
+    } catch (error) {
+        console.error('[WhatMusic Error]', error);
+
+        return res.status(500).json({
+            status: false,
+            error: 'No se pudo convertir o reconocer la canción. Intenta grabar de nuevo.'
+        });
+    }
+});
+router.post('/whatmusic-url', async (req, res) => {
+    try {
+        const { url } = req.body || {};
+
+        if (!url || typeof url !== 'string') {
+            return res.status(400).json({
+                status: false,
+                error: 'Falta el enlace del audio.'
+            });
+        }
+
+        let parsedUrl;
+
+        try {
+            parsedUrl = new URL(url.trim());
+
+            if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
+                throw new Error('Protocolo inválido');
+            }
+        } catch {
+            return res.status(400).json({
+                status: false,
+                error: 'El enlace debe ser una URL válida.'
+            });
+        }
+
+        const neoxrResponse = await fetchNeoxr(
+            '/whatmusic',
+            {
+                url: parsedUrl.href
+            }
+        );
+
+        return res.json(neoxrResponse);
+    } catch (error) {
+        console.error('[WhatMusic URL Error]', error);
+
+        return res.status(500).json({
+            status: false,
+            error: 'No se pudo reconocer la canción desde el enlace.'
+        });
+    }
 });
 
 module.exports = router;
