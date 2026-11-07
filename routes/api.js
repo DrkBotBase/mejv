@@ -360,7 +360,7 @@ router.post('/whatmusic', upload.single('audio'), async (req, res) => {
                 'tmpfiles.org/',
                 'tmpfiles.org/dl/'
             );
-
+console.log(directUrl)
         const neoxrResponse = await fetchNeoxr(
             '/whatmusic',
             {
