@@ -335,18 +335,12 @@ router.post('/whatmusic', upload.single('audio'), async (req, res) => {
             knownLength: mp3Buffer.length
         });
 
-        const uploadResponse = await axios.post('https://0x0.st', formData, {
-            headers: {
-                ...formData.getHeaders(),
-                'User-Agent': 'Mozilla/5.0'
-            },
-            maxBodyLength: Infinity,
-            maxContentLength: Infinity,
-            timeout: 15000
-        });
-
-        const directUrl = uploadResponse.data.trim();
-
+const uploadResponse = await axios.post('https://uguu.se/upload.php', formData, {
+    headers: formData.getHeaders(),
+    timeout: 15000
+});
+const directUrl = uploadResponse.data.files[0].url;
+      
         if (!directUrl || !directUrl.startsWith('http')) {
             throw new Error('El servicio temporal no devolvió una URL válida.');
         }
