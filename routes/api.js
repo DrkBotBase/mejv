@@ -335,38 +335,25 @@ router.post('/whatmusic', upload.single('audio'), async (req, res) => {
             knownLength: mp3Buffer.length
         });
 
-        const uploadResponse = await axios.post(
-            'https://tmpfiles.org/api/v1/upload',
-            formData,
-            {
-                headers: formData.getHeaders(),
-                maxBodyLength: Infinity,
-                maxContentLength: Infinity,
-                timeout: 15000
-            }
-        );
+        const uploadResponse = await axios.post('https://0x0.st', formData, {
+            headers: {
+                ...formData.getHeaders(),
+                'User-Agent': 'Mozilla/5.0'
+            },
+            maxBodyLength: Infinity,
+            maxContentLength: Infinity,
+            timeout: 15000
+        });
 
-        const temporaryUrl = uploadResponse.data?.data?.url;
+        const directUrl = uploadResponse.data.trim();
 
-        if (!temporaryUrl) {
-            throw new Error(
-                'tmpfiles.org no devolvió una URL válida.'
-            );
+        if (!directUrl || !directUrl.startsWith('http')) {
+            throw new Error('El servicio temporal no devolvió una URL válida.');
         }
 
-        const directUrl = temporaryUrl.includes('/dl/')
-            ? temporaryUrl
-            : temporaryUrl.replace(
-                'tmpfiles.org/',
-                'tmpfiles.org/dl/'
-            );
-console.log(directUrl)
-        const neoxrResponse = await fetchNeoxr(
-            '/whatmusic',
-            {
-                url: directUrl
-            }
-        );
+        console.log('[WhatMusic] subido:', directUrl);
+
+        const neoxrResponse = await fetchNeoxr('/whatmusic', { url: directUrl });
 
         return res.json(neoxrResponse);
     } catch (error) {
