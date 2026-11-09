@@ -7,6 +7,7 @@ const { fetchNeoxr, fetchStellarwa } = require('../services/api-clients');
 const { getSpotifyDownload } = require('../services/spotify');
 const { scrapeTikTok } = require('../services/tiktok');
 const { scrapePinterest } = require('../services/pinterest');
+const { getSocialMedia } = require('../services/snapsave');
 const { trackLimiter } = require('../utils/limiters');
 
 const usageSchema = new mongoose.Schema({
@@ -132,19 +133,69 @@ router.get('/resolve', async (req, res) => {
         imageResponse = { images: [result.url], total: 1 };
       }
 
+    // ─── INSTAGRAM ───
     } else if (platform === 'instagram') {
-      const result = await fetchNeoxr('/ig', { url });
+      let scraped = null;
       
-      if (!result || !result.status) {
-        throw new Error('No se pudo extraer el contenido de Instagram.');
+      try {
+        scraped = await getSocialMedia(url);
+      } catch (e) {
+        console.warn('Scraper IG falló, pasando a Neoxr...');
       }
-      
-      if (result.data[0].type === 'mp4') {
-        rawFileUrl = result.data[0].url;
-        filename = `insta_${Date.now()}.mp4`;
+
+      if (scraped) {
+        if (scraped.type === 'video') {
+          rawFileUrl = scraped.url;
+          filename = `insta_${Date.now()}.mp4`;
+        } else {
+          imageResponse = { images: scraped.urls, total: scraped.urls.length };
+        }
       } else {
-        const images = result.data.map(item => item.url);
-        imageResponse = { images: images, total: images.length };
+        const result = await fetchNeoxr('/ig', { url });
+        
+        if (!result || !result.status || !Array.isArray(result.data) || result.data.length === 0) {
+          throw new Error('No se pudo extraer el contenido de Instagram.');
+        }
+        
+        if (result.data[0].type === 'mp4') {
+          rawFileUrl = result.data[0].url;
+          filename = `insta_${Date.now()}.mp4`;
+        } else {
+          const images = result.data.map(item => item.url);
+          imageResponse = { images: images, total: images.length };
+        }
+      }
+
+    // ─── FACEBOOK  ───
+    } else if (platform === 'facebook') {
+      let scraped = null;
+      
+      try {
+        scraped = await getSocialMedia(url);
+      } catch (e) {
+        console.warn('Scraper FB falló, pasando a Neoxr...');
+      }
+
+      if (scraped) {
+        if (scraped.type === 'video') {
+          rawFileUrl = scraped.url;
+          filename = `facebook_${Date.now()}.mp4`;
+        } else {
+          imageResponse = { images: scraped.urls, total: scraped.urls.length };
+        }
+      } else {
+        const result = await fetchNeoxr('/fb', { url });
+        
+        if (!result || !result.status) {
+          throw new Error('No se pudo extraer el contenido de Facebook.');
+        }
+        
+        if (result.data) {
+            rawFileUrl = result.data.url;
+            filename = `facebook_${Date.now()}.mp4`;
+        } else {
+            throw new Error('Formato de respuesta de Neoxr para Facebook no soportado aún.');
+        }
       }
     } else {
       return res.status(400).json({ status: false, error: 'Plataforma no soportada' });
