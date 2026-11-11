@@ -140,7 +140,7 @@ router.get('/resolve', async (req, res) => {
       try {
         scraped = await getSocialMedia(url);
       } catch (e) {
-        console.warn('Scraper IG falló, pasando a Neoxr...');
+        console.warn('Scraper IG falló...');
       }
 
       if (scraped) {
@@ -173,7 +173,7 @@ router.get('/resolve', async (req, res) => {
       try {
         scraped = await getSocialMedia(url);
       } catch (e) {
-        console.warn('Scraper FB falló, pasando a Neoxr...');
+        console.warn('Scraper FB falló...');
       }
 
       if (scraped) {
@@ -194,7 +194,7 @@ router.get('/resolve', async (req, res) => {
             rawFileUrl = result.data.url;
             filename = `facebook_${Date.now()}.mp4`;
         } else {
-            throw new Error('Formato de respuesta de Neoxr para Facebook no soportado aún.');
+            throw new Error('Formato de respuesta para Facebook no soportado aún.');
         }
       }
     } else {

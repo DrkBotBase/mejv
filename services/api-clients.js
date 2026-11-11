@@ -19,7 +19,7 @@ async function fetchNeoxr(endpoint, params, retries = 2) {
         validateStatus: () => true,
       });
 
-      if (!data || data.status !== true) throw new Error(data?.message || 'Error en Neoxr');
+      if (!data || data.status !== true) throw new Error(data?.message || 'Error en API');
       setCached(key, data);
       return data;
     } catch (error) {
